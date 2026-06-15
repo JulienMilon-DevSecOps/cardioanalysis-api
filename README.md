@@ -40,7 +40,7 @@ cp .env.example .env
 ## Running
 
 ```bash
-uvicorn cardioanalysis_api.main:app --reload
+uvicorn app.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -49,25 +49,30 @@ Interactive documentation: `http://localhost:8000/docs`
 ## Project structure
 
 ```
-cardioanalysis_api/
-├── main.py          # FastAPI app, router registration, lifespan
-├── config.py        # Settings loaded from .env
-├── routers/         # HTTP endpoints — no business logic
-│   ├── health.py    # GET /health
-│   ├── parse.py     # POST /parse/polar, /hrv4training, /apple-health, /garmin/*
-│   ├── analyze.py   # POST /analyze/resting, /orthostatic
-│   ├── sessions.py  # CRUD /sessions
-│   └── analytics.py # GET /baseline/{user_id}, /analytics/readiness, /training-load
-├── schemas/         # Pydantic models — request/response contracts
-│   ├── parse.py
-│   ├── analyze.py
-│   ├── sessions.py
-│   └── analytics.py
-└── services/        # Application logic — only layer that imports cardiolab
-    ├── parse.py     # Temp file handling + cardiolab sensor parsers
-    ├── analyze.py   # RRSeries construction + cardiolab protocols
-    ├── db.py        # PostgreSQL connection, get_repository() dependency
-    └── analytics.py # Baseline, readiness score, training load
+cardioanalysis-api/
+├── app/                     # Main Python package
+│   ├── main.py              # FastAPI app, router registration, lifespan
+│   ├── config.py            # Settings loaded from .env
+│   ├── routers/             # HTTP endpoints — no business logic
+│   │   ├── health.py        # GET /health
+│   │   ├── parse.py         # POST /parse/polar, /hrv4training, /apple-health, /garmin/*
+│   │   ├── analyze.py       # POST /analyze/resting, /orthostatic
+│   │   ├── sessions.py      # CRUD /sessions
+│   │   └── analytics.py     # GET /baseline/{user_id}, /analytics/readiness, /training-load
+│   ├── schemas/             # Pydantic models — request/response contracts
+│   │   ├── parse.py
+│   │   ├── analyze.py
+│   │   ├── sessions.py
+│   │   └── analytics.py
+│   └── services/            # Application logic — only layer that imports cardiolab
+│       ├── parse.py         # Temp file handling + cardiolab sensor parsers
+│       ├── analyze.py       # RRSeries construction + cardiolab protocols
+│       ├── db.py            # PostgreSQL connection, get_repository() dependency
+│       └── analytics.py     # Baseline, readiness score, training load
+├── tests/
+├── build/                   # Dockerfile, docker-compose.yml
+├── pyproject.toml
+└── requirements.txt
 ```
 
 ## API overview
