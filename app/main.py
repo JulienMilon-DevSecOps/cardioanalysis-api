@@ -9,9 +9,12 @@ import time
 
 from fastapi import FastAPI, Request
 
-logger = logging.getLogger(__name__)
+from app.routers import health_router
 
-# from .routers import ***
+# ── Routers ───────────────────────────────────────────────────────────────────
+# from app.routers import parse_router, analyze_router, sessions_router, analytics_router
+
+logger = logging.getLogger(__name__)
 
 description = """
 REST API exposing the **cardiolab** HRV analysis toolkit as an HTTP service.
@@ -55,6 +58,8 @@ app = FastAPI(
         "url": "https://www.gnu.org/licenses/agpl-3.0.en.html",
     },
 )
+
+app.include_router(health_router)
 
 
 @app.middleware("http")
