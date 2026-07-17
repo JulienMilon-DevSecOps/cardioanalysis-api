@@ -7,4 +7,4 @@ variables:
   PYTHON_VERSION: '3.12.0'
   PYTEST_ENABLED: "true"
   # Image de base est registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-base:${PYTHON_VERSION}-latest mais on peut la remplacer.
-  DOCKER_IMAGE_PYTHON_BUILD_AND_TEST: 'registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi:${PYTHON_VERSION}-latest'
+  # DOCKER_IMAGE_PYTHON_BUILD_AND_TEST: 'registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi:${PYTHON_VERSION}-latest'
