@@ -1,0 +1,2 @@
+# Test dependencies — installed by CI before running pytest
+httpx2
