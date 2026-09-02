@@ -10,8 +10,10 @@ dist/
 # Virtual environment
 .venv/
 
-# Environment variables
-.env
+# Environment variables — never commit real secrets, only *.example templates
+.env*
+!.env.example
+!.env.*.example
 
 # Coverage
 .coverage

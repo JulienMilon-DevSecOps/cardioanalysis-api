@@ -112,10 +112,12 @@ pytest --cov=cardioanalysis_api --cov-report=term-missing
 | Version | Content                                      |
 |---------|----------------------------------------------|
 | v0.1.0  | Project scaffold, `/health`, GitLab CI       |
-| v0.2.0  | Sensor parsers (Polar, HRV4Training, Garmin, Apple Health) |
-| v0.3.0  | HRV analysis endpoints (resting, orthostatic)|
-| v0.4.0  | PostgreSQL persistence, sessions CRUD        |
-| v0.5.0  | Analytics (baseline, readiness, training load)|
+| v0.2.0  | Authentication & user management (Supabase)  |
+| v0.3.0  | Sensor parsers (Polar, HRV4Training, Garmin, Apple Health) |
+| v0.4.0  | HRV analysis endpoints (resting, orthostatic)|
+| v0.5.0  | Supabase Postgres persistence, sessions CRUD, data migration |
+| v0.6.0  | Analytics (baseline, readiness, training load)|
+| v0.7.0+ | Other cardiolab protocols (coherence, HRR, drift, vo2max) |
 
 ## License
 
