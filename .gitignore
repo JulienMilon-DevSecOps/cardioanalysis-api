@@ -32,3 +32,6 @@ Thumbs.db
 
 # Private dev notes
 DEV_RULES.md
+
+# Local-only infra (Supabase self-hosted, migration scripts, secrets) — never pushed
+local/

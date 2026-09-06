@@ -9,7 +9,7 @@ import time
 
 from fastapi import FastAPI, Request
 
-from app.routers import health_router
+from app.routers import auth_router, health_router
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 # from app.routers import parse_router, analyze_router, sessions_router, analytics_router
@@ -60,6 +60,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(auth_router)
 
 
 @app.middleware("http")

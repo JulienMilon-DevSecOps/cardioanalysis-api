@@ -80,6 +80,7 @@ cardioanalysis-api/
 | Method | Endpoint                        | Description                            |
 |--------|---------------------------------|----------------------------------------|
 | GET    | `/health`                       | Service health check                   |
+| GET    | `/me`                           | Current authenticated user + HRV profile |
 | POST   | `/parse/polar`                  | Parse Polar RR file (.txt/.csv/.rr)    |
 | POST   | `/parse/hrv4training`           | Parse HRV4Training export (.csv)       |
 | POST   | `/parse/apple-health`           | Parse Apple Health export (.xml)       |
