@@ -30,9 +30,17 @@ def client() -> TestClient:
 # stops it again if this very session is the one that started it — keeps the
 # stack off (no CPU/RAM usage) the rest of the time. Uses `stop`/`start`
 # (not `down`/`up`) so restarts are fast, no re-init of Postgres.
+#
+# Only "db" and "supavisor" (the pooler) are started — that's all these
+# integration tests actually touch (direct SQL via psycopg2/HRVRepository).
+# Deliberately NOT the full stack: "studio" (Next.js) is memory-heavy and was
+# seen crashing under load on this machine, and nothing here needs the HTTP
+# gateway/auth API. Neither "db" nor "supavisor" depends on "studio", so this
+# also sidesteps the api-gw → studio dependency chain entirely.
 
 _SUPABASE_DIR = Path(__file__).resolve().parent.parent / "local" / "auth"
 _COMPOSE_CMD = ["docker", "compose", "--env-file", "dev/.env"]
+_MINIMAL_SERVICES = ["db", "supavisor"]
 _we_started_supabase = False
 
 
@@ -91,7 +99,15 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         return
     try:
         subprocess.run(  # noqa: S603
-            [*_COMPOSE_CMD, "up", "-d", "--wait", "--wait-timeout", "120"],
+            [
+                *_COMPOSE_CMD,
+                "up",
+                "-d",
+                "--wait",
+                "--wait-timeout",
+                "120",
+                *_MINIMAL_SERVICES,
+            ],
             cwd=_SUPABASE_DIR,
             check=False,
         )
@@ -104,4 +120,6 @@ def pytest_collection_finish(session: pytest.Session) -> None:
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
     """Stop the local Supabase stack if this session is the one that started it."""
     if _we_started_supabase:
-        subprocess.run([*_COMPOSE_CMD, "stop"], cwd=_SUPABASE_DIR, check=False)  # noqa: S603
+        subprocess.run(  # noqa: S603
+            [*_COMPOSE_CMD, "stop", *_MINIMAL_SERVICES], cwd=_SUPABASE_DIR, check=False
+        )
