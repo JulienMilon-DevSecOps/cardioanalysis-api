@@ -1,0 +1,29 @@
+# Secrets et infra locale — ne doivent jamais entrer dans le contexte de build
+.env*
+local/
+
+# Git, environnements et caches
+.git/
+.gitlab/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+pytest-report.xml
+dist/
+build/
+
+# Non nécessaires à l'image
+tests/
+DEV_RULES.md
+CHANGELOG.md
+.pre-commit-config.yaml
+.gitlab-ci.yml
+Dockerfile
+.dockerignore
+.idea/
+.vscode/

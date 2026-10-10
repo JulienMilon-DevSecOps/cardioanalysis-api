@@ -1,10 +1,22 @@
 include:
   - project: 'project-jmilon-devsecops/ci-cd/pipeline-python-centralisee'
-    ref: 0.4.0 
+    ref: 0.7.1
     file: 'pipelines/python-fastapi-pipeline.yml'
 
 variables:
-  PYTHON_VERSION: '3.12.0'
-  PYTEST_ENABLED: "true"
-  # Image de base est registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-base:${PYTHON_VERSION}-latest mais on peut la remplacer.
-  # DOCKER_IMAGE_PYTHON_BUILD_AND_TEST: 'registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi:${PYTHON_VERSION}-latest'
+  PYTHON_VERSION: "3.12"
+  # Projet installé avec l'extra "dev" (pytest, pytest-cov, httpx2)
+  PYTHON_PROJECT_EXTRAS: "dev"
+  # Couverture mesurée sur app/ (seuil de 80 % défini dans pyproject.toml)
+  PYTEST_COV_SOURCE: "app"
+
+  # Tests d'intégration : base PostgreSQL jetable (job pytest-postgres, service "postgres")
+  PYTEST_DATABASE: "postgres"
+  DB_HOST_TEST: "postgres"
+  DB_PORT_TEST: "5432"
+  DB_NAME_TEST: "$POSTGRES_DB"
+  DB_USER_TEST: "$POSTGRES_USER"
+  DB_PASSWORD_TEST: "$POSTGRES_PASSWORD"
+
+  # Image Docker : Dockerfile à la racine et registre GitLab (valeurs par défaut)
+  # DOCKER_BUILD_CHECK: "true"   # build sans push à chaque commit de branche (optionnel)
