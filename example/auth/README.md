@@ -38,7 +38,8 @@ Postgres `17.6.1.136`, Supavisor `2.9.5`...).
 
 | Élément | Origine |
 |---------|---------|
-| `docker-compose.yml`, `docker-compose.caddy.yml`, `run.sh`, `reset.sh`, `utils/`, `volumes/` | Officiel, non modifié (`reset.sh` : voir section 9) |
+| `docker-compose.yml` | Officiel ; seuls les secrets d'exemple des hooks Auth (lignes commentées `GOTRUE_HOOK_SEND_*_SECRETS`) sont remplacés par `<standard-base64-secret>` pour ne pas déclencher les scanners de secrets |
+| `docker-compose.caddy.yml`, `run.sh`, `reset.sh`, `utils/`, `volumes/` | Officiel, non modifié (`reset.sh` : voir section 9) |
 | `.env.example` | Officiel, secrets de démonstration remplacés par `change-me-run-utils-generate-keys`, section pgAdmin ajoutée |
 | `docker-compose.minimal.yml` | Ajouté : auth + base de données sans Studio (machines avec peu de RAM) |
 | `docker-compose.pgadmin.yml` | Ajouté : pgAdmin pour le développement local |
