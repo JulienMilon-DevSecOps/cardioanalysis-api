@@ -9,6 +9,7 @@ import time
 
 from fastapi import FastAPI, Request
 
+from app.config import APP_VERSION
 from app.routers import auth_router, health_router
 
 # ── Routers ───────────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ app = FastAPI(
     title="cardioanalysis-api",
     summary="HRV analysis REST API for cardiac monitoring and athlete performance tracking.",
     description=description,
-    version="0.1.0",
+    version=APP_VERSION,
     contact={
         "name": "Julien MILON",
         "email": "julienmilon.devsecops@gmail.com",

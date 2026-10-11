@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cardioanalysis-api"
-version = "0.1.0"
+version = "0.1.1"
 description = "REST API exposing cardiolab HRV analysis as an HTTP service"
 authors = [{name = "Julien MILON", email = "julienmilon.devsecops@gmail.com"}]
 readme = "README.md"
@@ -68,34 +68,13 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = [
-    "E",
-    "F",
-    "I",
-    "B",
-    "UP",
-    "SIM",
-    "D",
-    "N",
-    "S",
-    "FAST",
-]
-ignore = [
-    "E501",
-    "D203",
-    "D213",
-]
+select = ["E", "F", "I", "B", "UP", "SIM", "D", "N", "S", "FAST"]
+ignore = ["E501", "D203", "D213"]
+fixable = ["E", "F", "I", "UP", "D"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 
-fixable = [
-    "E",
-    "F",
-    "I",
-    "UP",
-    "D",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

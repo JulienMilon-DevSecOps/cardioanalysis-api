@@ -9,6 +9,8 @@ variables:
   PYTHON_PROJECT_EXTRAS: "dev"
   # Couverture mesurée sur app/ (seuil de 80 % défini dans pyproject.toml)
   PYTEST_COV_SOURCE: "app"
+  # Dépendance dans le fichier pyproject.
+  PYTHON_REQUIREMENTS_FILES: ""
 
   # Tests d'intégration : base PostgreSQL jetable (job pytest-postgres, service "postgres")
   PYTEST_DATABASE: "postgres"
