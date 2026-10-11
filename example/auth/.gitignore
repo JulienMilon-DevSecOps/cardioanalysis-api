@@ -1,0 +1,7 @@
+# Secrets générés (utils/generate-keys.sh crée aussi une sauvegarde .env.old)
+.env
+.env.old
+
+# Données créées par les conteneurs au premier démarrage — jamais versionnées
+volumes/db/data/
+volumes/storage/

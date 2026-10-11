@@ -38,8 +38,19 @@ def client() -> TestClient:
 # gateway/auth API. Neither "db" nor "supavisor" depends on "studio", so this
 # also sidesteps the api-gw → studio dependency chain entirely.
 
-_SUPABASE_DIR = Path(__file__).resolve().parent.parent / "local" / "auth"
-_COMPOSE_CMD = ["docker", "compose", "--env-file", "dev/.env"]
+# Stack location, overridable for a stack deployed elsewhere (see
+# example/auth/README.md): SUPABASE_DIR is relative to the project root (or
+# absolute), SUPABASE_ENV_FILE relative to SUPABASE_DIR.
+_SUPABASE_DIR = (
+    Path(__file__).resolve().parent.parent
+    / Path(os.getenv("SUPABASE_DIR", "local/auth")).expanduser()
+)
+_COMPOSE_CMD = [
+    "docker",
+    "compose",
+    "--env-file",
+    os.getenv("SUPABASE_ENV_FILE", ".env"),
+]
 _MINIMAL_SERVICES = ["db", "supavisor"]
 _we_started_supabase = False
 

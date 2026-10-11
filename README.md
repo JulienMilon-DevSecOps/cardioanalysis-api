@@ -46,8 +46,13 @@ cp .env.example .env
 | `SUPABASE_JWT_SECRET` | `JWT_SECRET` of the Supabase stack, used to verify access tokens (HS256) | — |
 | `DB_HOST_TEST`, `DB_PORT_TEST`, `DB_NAME_TEST`, `DB_USER_TEST`, `DB_PASSWORD_TEST` | Test database for integration tests (see [Development](#development)) | `localhost`, `5432`… |
 | `ENV_FILE` | Alternative env file to load instead of `.env` | `.env.nas` |
+| `SUPABASE_DIR`, `SUPABASE_ENV_FILE` | Local Supabase stack started by `tests/conftest.py` for integration tests (folder relative to the project root, env file relative to that folder) | `local/auth`, `.env` |
 
 > With a self-hosted Supabase, the port exposed on the host is the Supavisor pooler's: the user must be in the `<role>.<POOLER_TENANT_ID>` format.
+
+### Self-hosted Supabase (authentication and database)
+
+The API verifies JWTs issued by Supabase Auth and stores its data in Supabase's PostgreSQL. A ready-to-deploy self-hosted Supabase stack (Docker Compose, no secrets included) is provided in [`example/auth/`](example/auth/). Its guide, [`example/auth/README.md`](example/auth/README.md) (in French), covers key generation, start modes (full, minimal without Studio, pgAdmin), user creation, connecting this API, running the stack only for tests or permanently, and server security.
 
 The application version (`/health`, OpenAPI docs) is not configured: it comes from `version` in `pyproject.toml`.
                                        |
@@ -91,6 +96,7 @@ cardioanalysis-api/
 │   └── services/            # Application logic — only layer that imports cardiolab
 │       └── db.py            # PostgreSQL access, get_repository()
 ├── tests/                   # Unit tests + integration tests (marker "integration")
+├── example/auth/            # Self-hosted Supabase stack to deploy (see its README)
 ├── Dockerfile               # Production image (multi-stage, non-root)
 ├── .dockerignore
 ├── .gitlab-ci.yml           # Centralised pipeline (pipeline-python-centralisee)
@@ -132,7 +138,7 @@ ruff format --check .
 pytest --cov --cov-report=term-missing
 ```
 
-Integration tests (marker `integration`) run when `DB_HOST_TEST` is set. Locally, `tests/conftest.py` starts the minimal Supabase stack (`db`, `supavisor`) if needed. In GitLab CI, a disposable `postgres` service is used instead (`PYTEST_DATABASE: "postgres"` in `.gitlab-ci.yml`).
+Integration tests (marker `integration`) run when `DB_HOST_TEST` is set. Locally, `tests/conftest.py` starts the minimal Supabase stack (`db`, `supavisor`) if needed, from `SUPABASE_DIR` (see [`example/auth/README.md`](example/auth/README.md), section 8). In GitLab CI, a disposable `postgres` service is used instead (`PYTEST_DATABASE: "postgres"` in `.gitlab-ci.yml`).
 
 
 ## Roadmap
