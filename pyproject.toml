@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cardioanalysis-api"
-version = "0.1.1"
+version = "0.2.0"
 description = "REST API exposing cardiolab HRV analysis as an HTTP service"
 authors = [{name = "Julien MILON", email = "julienmilon.devsecops@gmail.com"}]
 readme = "README.md"
