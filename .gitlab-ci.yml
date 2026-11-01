@@ -4,13 +4,15 @@ include:
     file: 'pipelines/python-fastapi-pipeline.yml'
 
 variables:
-  PYTHON_VERSION: "3.12"
-  # Projet installé avec l'extra "dev" (pytest, pytest-cov, httpx2)
-  PYTHON_PROJECT_EXTRAS: "dev"
+  PYTHON_VERSION: "3.13"
+  # Dépendances installées par `uv sync --frozen` depuis uv.lock (groupe dev
+  # inclus : pytest, pytest-cov, httpx2, ruff). Le job échoue si uv.lock n'est
+  # pas à jour avec pyproject.toml : lancer `uv lock` avant de pousser.
+  PYTHON_PACKAGE_MANAGER: "uv"
+  # Même version que le uv local (`uv --version`) : un uv plus ancien peut refuser le uv.lock
+  UV_VERSION: "0.13.6"
   # Couverture mesurée sur app/ (seuil de 80 % défini dans pyproject.toml)
   PYTEST_COV_SOURCE: "app"
-  # Dépendance dans le fichier pyproject.
-  PYTHON_REQUIREMENTS_FILES: ""
 
   # Tests d'intégration : base PostgreSQL jetable (job pytest-postgres, service "postgres")
   PYTEST_DATABASE: "postgres"

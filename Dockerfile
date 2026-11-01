@@ -4,24 +4,37 @@
 # aucun fichier .env n'est copié dans l'image.
 
 # ── Étape 1 : installation du projet et de ses dépendances dans un venv ───────
-FROM python:3.12-slim AS builder
+# Versions exactes de uv.lock (les mêmes que celles testées en CI), sans le groupe dev.
+FROM python:3.13-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Venv créé par uv hors du code, avec le Python de l'image (jamais téléchargé)
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    # Précompile les .pyc à l'installation (uv ne le fait pas par défaut, contrairement
+    # à pip) : sans eux, avec PYTHONDONTWRITEBYTECODE, numpy/scipy/matplotlib seraient
+    # recompilés à chaque démarrage (~18 s mesurées au lieu de quelques secondes)
+    UV_COMPILE_BYTECODE=1
+
+# Même version que UV_VERSION dans .gitlab-ci.yml
+RUN pip install uv==0.13.6
 
 WORKDIR /build
 
-# Fichiers nécessaires au build du package (hatchling lit README.md et LICENCE)
-COPY pyproject.toml README.md LICENCE ./
-COPY app ./app
+# Dépendances d'abord : couche mise en cache tant que uv.lock ne change pas
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
-# Installation non éditable : le code et sa version (importlib.metadata) vont dans le venv
-RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install .
+# Puis le projet, installé non éditable : le code et sa version (importlib.metadata)
+# vont dans le venv (hatchling lit README.md et LICENCE)
+COPY README.md LICENCE ./
+COPY app ./app
+RUN uv sync --frozen --no-dev --no-editable --no-cache
 
 # ── Étape 2 : image d'exécution, sans outils de build ─────────────────────────
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
