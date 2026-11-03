@@ -1,5 +1,5 @@
 include:
-  - component: $CI_SERVER_FQDN/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi@0.11.1
+  - component: $CI_SERVER_FQDN/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi@1.0.0
     # Tous les inputs sont écrits, même quand la valeur est celle par défaut,
     # pour voir d'un coup d'œil ce qui est actif (référence : docs/components.md
     # de la pipeline centralisée).
@@ -10,6 +10,8 @@ include:
       # inclus : pytest, pytest-cov, httpx2, ruff). Le job échoue si uv.lock n'est
       # pas à jour avec pyproject.toml : lancer `uv lock` avant de pousser.
       package_manager: uv
+      # Options ajoutées à `uv sync --frozen` : vide = dépendances + groupe dev, sans extras
+      uv_sync_args: ""
       project_dir: "."
       # Mode pip uniquement (ignorés avec uv), valeurs par défaut
       project_extras: "test"
@@ -29,7 +31,7 @@ include:
       version_check_enabled: true            # version du tag = version du pyproject.toml — ACTIF, bloquant
       ruff_allow_failure: false              # lint et formatage Ruff — ACTIF, bloquant
       sast_allow_failure: false              # règles de sécurité Ruff (job sast) — ACTIF, bloquant
-      dependency_scan_allow_failure: true    # vulnérabilités des dépendances + SBOM — ACTIF, non bloquant
+      dependency_scan_allow_failure: false   # vulnérabilités des dépendances + SBOM — ACTIF, bloquant
       dockerfile_check_allow_failure: false  # bonnes pratiques du Dockerfile (root, latest, secrets...) — ACTIF, bloquant
       scan_blocking_severity: "CRITICAL"     # CVE de l'image qui bloquent la publication (job trivy-scan)
       scan_allow_failure: false              # scan de l'image — ACTIF, bloquant
