@@ -1,10 +1,64 @@
 include:
-  - project: 'project-jmilon-devsecops/ci-cd/pipeline-python-centralisee'
-    ref: 0.4.0 
-    file: 'pipelines/python-fastapi-pipeline.yml'
+  - component: $CI_SERVER_FQDN/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi@1.0.0
+    # Tous les inputs sont écrits, même quand la valeur est celle par défaut,
+    # pour voir d'un coup d'œil ce qui est actif (référence : docs/components.md
+    # de la pipeline centralisée).
+    inputs:
+      # ── Python et dépendances ──────────────────────────────────────────────
+      python_version: "3.13"
+      # Dépendances installées par `uv sync --frozen` depuis uv.lock (groupe dev
+      # inclus : pytest, pytest-cov, httpx2, ruff). Le job échoue si uv.lock n'est
+      # pas à jour avec pyproject.toml : lancer `uv lock` avant de pousser.
+      package_manager: uv
+      # Options ajoutées à `uv sync --frozen` : vide = dépendances + groupe dev, sans extras
+      uv_sync_args: ""
+      project_dir: "."
+      # Mode pip uniquement (ignorés avec uv), valeurs par défaut
+      project_extras: "test"
+      requirements_files: "requirements.txt requirements-test.txt"
+
+      # ── Tests ──────────────────────────────────────────────────────────────
+      pytest_enabled: true
+      pytest_args: "-v"
+      # Couverture mesurée sur app/ (seuil de 80 % défini dans pyproject.toml)
+      pytest_cov_source: "app"
+      pytest_extra_packages: ""
+      pytest_pre_script: ""
+      # Tests d'intégration sur la base PostgreSQL jetable (job pytest-postgres, service "postgres")
+      pytest_database: postgres
+
+      # ── Sécurité : état des contrôles (gitleaks toujours actif et bloquant) ─
+      version_check_enabled: true            # version du tag = version du pyproject.toml — ACTIF, bloquant
+      ruff_allow_failure: false              # lint et formatage Ruff — ACTIF, bloquant
+      sast_allow_failure: false              # règles de sécurité Ruff (job sast) — ACTIF, bloquant
+      dependency_scan_allow_failure: false   # vulnérabilités des dépendances + SBOM — ACTIF, bloquant
+      dockerfile_check_allow_failure: false  # bonnes pratiques du Dockerfile (root, latest, secrets...) — ACTIF, bloquant
+      scan_blocking_severity: "CRITICAL"     # CVE de l'image qui bloquent la publication (job trivy-scan)
+      scan_allow_failure: false              # scan de l'image — ACTIF, bloquant
+
+      # ── Image Docker : Dockerfile à la racine ──────────────────────────────
+      dockerfile_path: "Dockerfile"
+      docker_context: "."
+      docker_build_check: false              # build sans push à chaque commit de branche — INACTIF
+
+      # ── Publication et signature ───────────────────────────────────────────
+      publish_gitlab: true                   # registre GitLab du projet — ACTIF
+      publish_dockerhub: false               # Docker Hub — INACTIF
+      dockerhub_image: ""
+      image_signing_enabled: false           # signature cosign — INACTIF, prévue avec le déploiement (0.12.0)
 
 variables:
-  PYTHON_VERSION: '3.12.0'
-  PYTEST_ENABLED: "true"
-  # Image de base est registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-base:${PYTHON_VERSION}-latest mais on peut la remplacer.
-  # DOCKER_IMAGE_PYTHON_BUILD_AND_TEST: 'registry.gitlab.com/project-jmilon-devsecops/ci-cd/pipeline-python-centralisee/python-fastapi:${PYTHON_VERSION}-latest'
+  # Réglages sans input (restent en variables, voir docs/components.md)
+  # Même version que le uv local (`uv --version`) : un uv plus ancien peut refuser le uv.lock
+  UV_VERSION: "0.13.6"
+  # Niveaux signalés par le job dockerfile-check (valeur par défaut)
+  DOCKERFILE_CHECK_SEVERITY: "HIGH,CRITICAL"
+  # CVE sans correctif ignorées pour le blocage du trivy-scan (valeur par défaut)
+  SCAN_IGNORE_UNFIXED: "true"
+
+  # Tests d'intégration : connexion à la base jetable du job pytest-postgres
+  DB_HOST_TEST: "postgres"
+  DB_PORT_TEST: "5432"
+  DB_NAME_TEST: "$POSTGRES_DB"
+  DB_USER_TEST: "$POSTGRES_USER"
+  DB_PASSWORD_TEST: "$POSTGRES_PASSWORD"
