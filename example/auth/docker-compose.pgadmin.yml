@@ -1,0 +1,27 @@
+# Override "pgadmin" — pgAdmin web UI to browse the stack's Postgres.
+# Local development only: never enable it on a server reachable from the internet.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.pgadmin.yml up -d pgadmin
+#
+# Then open http://localhost:${PGADMIN_PORT} and register a server with:
+#   host: db, port: 5432, user: postgres, password: POSTGRES_PASSWORD from .env
+# (inside the Docker network, "db" is the raw Postgres — not the Supavisor pooler)
+
+services:
+  pgadmin:
+    container_name: supabase-pgadmin
+    image: dpage/pgadmin4:8.14
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+volumes:
+  pgadmin-data:

@@ -1,0 +1,19 @@
+# Override "minimal" — auth + database without the Studio dashboard.
+#
+# In the base docker-compose.yml, the API gateway (api-gw) waits for Studio to
+# be healthy before starting. Studio (Next.js) is memory-hungry and is not
+# technically needed by the gateway: this override removes that dependency so
+# that auth (/auth/v1/*) can run on a machine with little RAM.
+#
+# `!override` replaces the original depends_on instead of merging it.
+#
+# Usage (list the services explicitly, otherwise `up -d` starts everything):
+#   docker compose -f docker-compose.yml -f docker-compose.minimal.yml \
+#     up -d db supavisor auth api-gw
+#
+# The dashboard route (http://localhost:8000/) fails until Studio is started
+# separately: docker compose up -d studio meta
+
+services:
+  api-gw:
+    depends_on: !override {}

@@ -2,40 +2,59 @@
 
 REST API exposing the [cardiolab](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardiolab) HRV analysis toolkit as an HTTP service.
 
-Built with **FastAPI** and **Python 3.12**. Designed as a thin routing and validation layer on top of cardiolab — all scientific computation stays in the library.
+Built with **FastAPI** and **Python 3.13**. Designed as a thin routing and validation layer on top of cardiolab — all scientific computation stays in the library.
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.13+
 - PostgreSQL (v0.4.0+)
 - cardiolab >= 0.3.0
 
 ## Installation
 
+Dependencies are managed with [uv](https://docs.astral.sh/uv/) (version `0.13.6`, same as the CI). uv installs Python 3.13 itself if needed (`.python-version`).
+
 ```bash
-# Create virtual environment
-python3.12 -m venv .venv
-source .venv/bin/activate
+# Development: creates .venv with runtime dependencies + the "dev" group
+# (pytest, pytest-cov, httpx2, ruff), exactly as pinned in uv.lock
+uv sync
 
-# Install runtime dependencies
-pip install -r requirements.txt
-
-# Install dev dependencies
-pip install -e ".[dev]"
+# Runtime only (no dev tools), as in the Docker image
+uv sync --no-dev
 ```
+
+Dependencies are declared in `pyproject.toml` (`[project].dependencies`, `[project.optional-dependencies]` for extras, `[dependency-groups]` for dev tools) and pinned in `uv.lock`, which is committed. Never edit `uv.lock` by hand: use `uv add`, `uv remove` or `uv lock`.
+
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values:
+The application is configured through environment variables. Locally, they are read from a `.env` file at the project root (never committed):
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable       | Description                          | Example                                          |
-|----------------|--------------------------------------|--------------------------------------------------|
-| `DATABASE_URL` | PostgreSQL connection string         | `postgresql://user:pass@localhost:5432/cardioanalysis` |
-| `APP_VERSION`  | Application version (auto-populated) | `0.1.0`                                          |
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DB_HOST` | PostgreSQL host of the application database | `localhost` |
+| `DB_PORT` | PostgreSQL port | `5432` |
+| `DB_NAME` | Database name | `cardioanalysis_database` |
+| `DB_USER` | Database user | `user` |
+| `DB_PASSWORD` | Database password | — |
+| `SUPABASE_URL` | URL of the Supabase API gateway | `http://localhost:8000` |
+| `SUPABASE_JWT_SECRET` | `JWT_SECRET` of the Supabase stack, used to verify access tokens (HS256) | — |
+| `DB_HOST_TEST`, `DB_PORT_TEST`, `DB_NAME_TEST`, `DB_USER_TEST`, `DB_PASSWORD_TEST` | Test database for integration tests (see [Development](#development)) | `localhost`, `5432`… |
+| `ENV_FILE` | Alternative env file to load instead of `.env` | `.env.nas` |
+| `SUPABASE_DIR`, `SUPABASE_ENV_FILE` | Local Supabase stack started by `tests/conftest.py` for integration tests (folder relative to the project root, env file relative to that folder). Defaults: `../cardioanalysis-supabase-local-nas`, `local/.env` | `local/auth`, `.env` (stack from `example/auth`) |
+
+> With a self-hosted Supabase, the port exposed on the host is the Supavisor pooler's: the user must be in the `<role>.<POOLER_TENANT_ID>` format.
+
+### Self-hosted Supabase (authentication and database)
+
+The API verifies JWTs issued by Supabase Auth and stores its data in Supabase's PostgreSQL. A ready-to-deploy self-hosted Supabase stack (Docker Compose, no secrets included) is provided in [`example/auth/`](example/auth/). Its guide, [`example/auth/README.md`](example/auth/README.md) (in French), covers key generation, start modes (full, minimal without Studio, pgAdmin), user creation, connecting this API, running the stack only for tests or permanently, and server security.
+
+The application version (`/health`, OpenAPI docs) is not configured: it comes from `version` in `pyproject.toml`.
+                                       |
 
 ## Running
 
@@ -43,43 +62,55 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`.
-Interactive documentation: `http://localhost:8000/docs`
+The API will be available at `http://localhost:8000` — interactive documentation at `http://localhost:8000/docs`.
+If the local Supabase gateway already uses port 8000, add `--port 8080`.
+
+To point at another backend (e.g. the NAS): `ENV_FILE=.env.nas uvicorn app.main:app --reload`.
+
+### With Docker
+
+The image is built, scanned and published by the GitLab CI pipeline on `V-x.y.z` tags (`registry.gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api:<version>`). To build and run it locally:
+
+```bash
+docker build -t cardioanalysis-api .
+# docker run --env-file does not strip quotes: use an env file without quotes around values
+docker run --rm -p 8080:8000 --env-file .env.docker cardioanalysis-api
+```
+
+The image runs as a non-root user and exposes a `HEALTHCHECK` on `/health`. No `.env` file is embedded in the image (see `.dockerignore`).
+
 
 ## Project structure
 
 ```
 cardioanalysis-api/
 ├── app/                     # Main Python package
-│   ├── main.py              # FastAPI app, router registration, lifespan
-│   ├── config.py            # Settings loaded from .env
+│   ├── main.py              # FastAPI app, router registration
+│   ├── config.py            # Settings loaded from environment variables / .env
+│   ├── auth/                # Supabase JWT verification (get_current_user dependency)
 │   ├── routers/             # HTTP endpoints — no business logic
 │   │   ├── health.py        # GET /health
-│   │   ├── parse.py         # POST /parse/polar, /hrv4training, /apple-health, /garmin/*
-│   │   ├── analyze.py       # POST /analyze/resting, /orthostatic
-│   │   ├── sessions.py      # CRUD /sessions
-│   │   └── analytics.py     # GET /baseline/{user_id}, /analytics/readiness, /training-load
+│   │   └── auth.py          # GET /me
 │   ├── schemas/             # Pydantic models — request/response contracts
-│   │   ├── parse.py
-│   │   ├── analyze.py
-│   │   ├── sessions.py
-│   │   └── analytics.py
 │   └── services/            # Application logic — only layer that imports cardiolab
-│       ├── parse.py         # Temp file handling + cardiolab sensor parsers
-│       ├── analyze.py       # RRSeries construction + cardiolab protocols
-│       ├── db.py            # PostgreSQL connection, get_repository() dependency
-│       └── analytics.py     # Baseline, readiness score, training load
-├── tests/
-├── build/                   # Dockerfile, docker-compose.yml
-├── pyproject.toml
-└── requirements.txt
+│       └── db.py            # PostgreSQL access, get_repository()
+├── tests/                   # Unit tests + integration tests (marker "integration")
+├── example/auth/            # Self-hosted Supabase stack to deploy (see its README)
+├── Dockerfile               # Production image (multi-stage, non-root)
+├── .dockerignore
+├── .gitlab-ci.yml           # Centralised pipeline (pipeline-python-centralisee)
+└── pyproject.toml           # Metadata, dependencies, ruff/pytest/coverage config
 ```
+
+Planned modules (`parse`, `analyze`, `sessions`, `analytics`) are listed in the [Roadmap](#roadmap).
+
 
 ## API overview
 
 | Method | Endpoint                        | Description                            |
 |--------|---------------------------------|----------------------------------------|
 | GET    | `/health`                       | Service health check                   |
+| GET    | `/me`                           | Current authenticated user + HRV profile |
 | POST   | `/parse/polar`                  | Parse Polar RR file (.txt/.csv/.rr)    |
 | POST   | `/parse/hrv4training`           | Parse HRV4Training export (.csv)       |
 | POST   | `/parse/apple-health`           | Parse Apple Health export (.xml)       |
@@ -99,13 +130,22 @@ cardioanalysis-api/
 
 ```bash
 # Lint
-ruff check .
-ruff format --check .
+uv run ruff check .
+uv run ruff format --check .
 
-# Tests
-pytest
-pytest --cov=cardioanalysis_api --cov-report=term-missing
+# Tests (coverage measured on app/, minimum 80 %)
+uv run pytest --cov --cov-report=term-missing
+
+# Dependencies
+uv add <package>             # runtime dependency
+uv add --dev <package>       # dev tool
+uv lock --upgrade-package <package> && uv sync   # upgrade one dependency
 ```
+
+The CI installs with `uv sync --frozen`: it fails if `uv.lock` is out of date with `pyproject.toml` (run `uv lock` and commit both files).
+
+Integration tests (marker `integration`) run when `DB_HOST_TEST` is set. Locally, `tests/conftest.py` starts the minimal Supabase stack (`db`, `supavisor`) if needed, from `SUPABASE_DIR` (see [`example/auth/README.md`](example/auth/README.md), section 8). In GitLab CI, a disposable `postgres` service is used instead (`PYTEST_DATABASE: "postgres"` in `.gitlab-ci.yml`).
+
 
 ## Roadmap
 
