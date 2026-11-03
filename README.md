@@ -50,6 +50,7 @@ cp .env.example .env
 | `DB_NAME` | Database name | `cardioanalysis_database` |
 | `DB_USER` | Database user | `user` |
 | `DB_PASSWORD` | Database password | — |
+| `DB_SCHEMA` | Application schema: API tables and migration tracking (see [Database migrations](#database-migrations)). Default: `cardioanalysis` | `cardioanalysis` |
 | `SUPABASE_URL` | URL of the Supabase API gateway | `http://localhost:8000` |
 | `SUPABASE_JWT_SECRET` | `JWT_SECRET` of the Supabase stack, used to verify access tokens (HS256) | — |
 | `DB_HOST_TEST`, `DB_PORT_TEST`, `DB_NAME_TEST`, `DB_USER_TEST`, `DB_PASSWORD_TEST` | Test database for integration tests (see [Development](#development)) | `localhost`, `5432`… |
@@ -87,21 +88,41 @@ docker run --rm -p 8080:8000 --env-file .env.docker cardioanalysis-api
 
 The image runs as a non-root user and exposes a `HEALTHCHECK` on `/health`. No `.env` file is embedded in the image (see `.dockerignore`).
 
+### Database migrations
+
+The API's own tables are versioned by the SQL files of [`app/migrations/`](app/migrations/) (`A<nnn>__<description>.sql`, rules in its README). cardiolab's tables are not part of them: cardiolab applies its own migrations. Apply the pending ones before starting a new version:
+
+```bash
+uv run python -m app.migrate               # application migrations, with DB_USER
+uv run python -m app.migrate --status      # applied / pending, changes nothing
+ENV_FILE=.env.admin uv run python -m app.migrate --privileged   # administrator role
+```
+
+* Each migration runs in its own transaction; a failing one is rolled back and the command exits with code 1.
+* A migration that touches the `auth` schema (trigger on `auth.users`, signup hook) is **privileged** (`.privileged.sql`): it is applied only with `--privileged`, by an administrator role, never by the application role. A run stops at the first migration of the other kind, so the order is always kept.
+* Applied migrations are recorded, with a checksum, in `<DB_SCHEMA>.api_schema_migrations`; editing an applied migration stops the next run.
+* `--all` applies both kinds with a single role: for disposable databases only (the CI uses it before the tests).
+
+With Docker: `docker run --rm --env-file .env.docker cardioanalysis-api python -m app.migrate`.
+
 
 ## Project structure
 
 ```
 cardioanalysis-api/
 ├── app/                     # Main Python package
-│   ├── main.py              # FastAPI app, router registration
+│   ├── main.py              # FastAPI app, router registration (/v1 prefix)
 │   ├── config.py            # Settings loaded from environment variables / .env
+│   ├── migrate.py           # Command line: python -m app.migrate
+│   ├── migrations/          # SQL migrations of the API's tables (A<nnn>__*.sql)
 │   ├── auth/                # Supabase JWT verification (get_current_user dependency)
 │   ├── routers/             # HTTP endpoints — no business logic
 │   │   ├── health.py        # GET /health
-│   │   └── auth.py          # GET /me
+│   │   └── auth.py          # GET /v1/me
 │   ├── schemas/             # Pydantic models — request/response contracts
 │   └── services/            # Application logic — only layer that imports cardiolab
-│       └── db.py            # PostgreSQL access, get_repository()
+│       ├── db.py            # PostgreSQL access, get_repository(), get_connection()
+│       └── migrations.py    # Migration discovery and runner
 ├── tests/                   # Unit tests + integration tests (marker "integration")
 ├── example/auth/            # Self-hosted Supabase stack to deploy (see its README)
 ├── Dockerfile               # Production image (multi-stage, non-root)
@@ -119,11 +140,13 @@ Planned modules are listed in the [Roadmap](#roadmap).
 | Method | Endpoint  | Auth     | Description                              |
 |--------|-----------|----------|------------------------------------------|
 | GET    | `/health` | —        | Service health check and version         |
-| GET    | `/me`     | Bearer   | Current authenticated user + HRV profile |
+| GET    | `/v1/me`  | Bearer   | Current authenticated user + HRV profile |
 
-Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). Missing, invalid or expired token → `401`. The user is always identified by the token, never by an id in the path or query (only future `/admin/...` routes will take an account id).
+Business routes are versioned under `/v1`; `/health` stays at the root (Docker healthcheck, monitoring).
 
-Planned endpoints (versioned under `/v1` from v0.3.0) are listed in the [Roadmap](#roadmap).
+Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). Missing, invalid or expired token → `401`. The user is always identified by the token, never by an id in the path or query (only future `/v1/admin/...` routes will take an account id).
+
+Planned endpoints are listed in the [Roadmap](#roadmap).
 
 ## Development
 
