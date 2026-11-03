@@ -23,7 +23,9 @@ include:
       # Couverture mesurée sur app/ (seuil de 80 % défini dans pyproject.toml)
       pytest_cov_source: "app"
       pytest_extra_packages: ""
-      pytest_pre_script: ""
+      # Migrations de l'API appliquées sur la base jetable avant les tests ;
+      # --all : les deux types avec un seul rôle (superutilisateur de la base jetable)
+      pytest_pre_script: "python -m app.migrate --all"
       # Tests d'intégration sur la base PostgreSQL jetable (job pytest-postgres, service "postgres")
       pytest_database: postgres
 
@@ -62,3 +64,9 @@ variables:
   DB_NAME_TEST: "$POSTGRES_DB"
   DB_USER_TEST: "$POSTGRES_USER"
   DB_PASSWORD_TEST: "$POSTGRES_PASSWORD"
+  # Connexion de l'application, utilisée par `python -m app.migrate` (même base jetable)
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "$POSTGRES_DB"
+  DB_USER: "$POSTGRES_USER"
+  DB_PASSWORD: "$POSTGRES_PASSWORD"

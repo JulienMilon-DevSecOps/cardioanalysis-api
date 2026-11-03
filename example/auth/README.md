@@ -250,7 +250,7 @@ uvicorn app.main:app --reload --port 8001
 Obtenir un JWT (section 5), puis :
 
 ```bash
-curl -s http://localhost:8001/me -H "Authorization: Bearer <access_token>"
+curl -s http://localhost:8001/v1/me -H "Authorization: Bearer <access_token>"
 ```
 
 ---

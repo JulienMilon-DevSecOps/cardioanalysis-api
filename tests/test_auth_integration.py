@@ -83,7 +83,7 @@ def _make_token(sub: str) -> str:
 @pytest.mark.integration
 @_integration_skipif
 class TestMeWithRealDatabase:
-    """Integration tests for GET /me against a real, isolated Postgres table."""
+    """Integration tests for GET /v1/me against a real, isolated Postgres table."""
 
     @pytest.fixture(autouse=True)
     def _setup_and_teardown(self, monkeypatch: pytest.MonkeyPatch):
@@ -119,7 +119,7 @@ class TestMeWithRealDatabase:
             )
 
         token = _make_token(sub=user_id)
-        response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
 
         assert response.status_code == status.HTTP_200_OK
         body = response.json()
@@ -133,7 +133,7 @@ class TestMeWithRealDatabase:
         """A user with no row in the (empty) test table gets profile: null."""
         user_id = str(uuid.uuid4())
         token = _make_token(sub=user_id)
-        response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["profile"] is None

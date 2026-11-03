@@ -1,4 +1,4 @@
-"""Unit tests for the authentication layer (JWT verification + GET /me).
+"""Unit tests for the authentication layer (JWT verification + GET /v1/me).
 
 Pure unit tests: JWTs are self-signed with a fixed test secret (no real
 Supabase instance involved), and the database lookup is replaced by an
@@ -85,20 +85,20 @@ def with_profile(monkeypatch: pytest.MonkeyPatch) -> dict:
 
 
 class TestGetCurrentUser:
-    """Unit tests for the JWT verification dependency, exercised via GET /me."""
+    """Unit tests for the JWT verification dependency, exercised via GET /v1/me."""
 
     def test_missing_authorization_header(
         self, client: TestClient, no_profile: None
     ) -> None:
         """No Authorization header at all must return 401."""
-        response = client.get("/me")
+        response = client.get("/v1/me")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_header_without_bearer_prefix(
         self, client: TestClient, no_profile: None
     ) -> None:
         """A raw token without the 'Bearer ' prefix must return 401."""
-        response = client.get("/me", headers={"Authorization": _make_token()})
+        response = client.get("/v1/me", headers={"Authorization": _make_token()})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_invalid_signature(self, client: TestClient, no_profile: None) -> None:
@@ -112,13 +112,15 @@ class TestGetCurrentUser:
             "wrong-secret-also-32-characters+",
             algorithm="HS256",
         )
-        response = client.get("/me", headers={"Authorization": f"Bearer {bad_token}"})
+        response = client.get(
+            "/v1/me", headers={"Authorization": f"Bearer {bad_token}"}
+        )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_expired_token(self, client: TestClient, no_profile: None) -> None:
         """A token past its exp claim must return 401."""
         token = _make_token(exp=int(time.time()) - 10)
-        response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_wrong_audience_is_rejected(
@@ -126,7 +128,7 @@ class TestGetCurrentUser:
     ) -> None:
         """A token not meant for the 'authenticated' audience must return 401."""
         token = _make_token(aud="something-else")
-        response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_valid_token_without_profile(
@@ -134,7 +136,7 @@ class TestGetCurrentUser:
     ) -> None:
         """A valid token for a user with no profile row returns profile: null."""
         token = _make_token(sub=_USER_WITHOUT_PROFILE_ID)
-        response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == status.HTTP_200_OK
         body = response.json()
         assert body["id"] == _USER_WITHOUT_PROFILE_ID
@@ -145,7 +147,7 @@ class TestGetCurrentUser:
     ) -> None:
         """A valid token for a user with a profile row returns it enriched."""
         token = _make_token(sub=_USER_WITH_PROFILE_ID)
-        response = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+        response = client.get("/v1/me", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == status.HTTP_200_OK
         body = response.json()
         assert body["id"] == _USER_WITH_PROFILE_ID

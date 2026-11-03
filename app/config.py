@@ -35,3 +35,5 @@ DB_PORT: int = int(os.getenv("DB_PORT", "5432"))
 DB_NAME: str = os.getenv("DB_NAME", "")
 DB_USER: str = os.getenv("DB_USER", "")
 DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
+# Schéma applicatif : tables de l'API et suivi de ses migrations (app/migrate.py).
+DB_SCHEMA: str = os.getenv("DB_SCHEMA", "cardioanalysis")
