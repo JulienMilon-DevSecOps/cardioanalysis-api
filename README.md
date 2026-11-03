@@ -1,5 +1,14 @@
 # cardioanalysis-api
 
+[![Pipeline](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/badges/main/pipeline.svg)](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/-/pipelines?ref=main)
+[![Coverage](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/badges/main/coverage.svg)](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/-/pipelines?ref=main)
+[![Latest release](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/-/badges/release.svg)](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/-/releases)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardioanalysis-api/-/blob/main/LICENCE)
+
 REST API exposing the [cardiolab](https://gitlab.com/project-jmilon-devsecops/cardioanalysis/cardiolab) HRV analysis toolkit as an HTTP service.
 
 Built with **FastAPI** and **Python 3.13**. Designed as a thin routing and validation layer on top of cardiolab — all scientific computation stays in the library.
@@ -7,7 +16,7 @@ Built with **FastAPI** and **Python 3.13**. Designed as a thin routing and valid
 ## Requirements
 
 - Python 3.13+
-- PostgreSQL (v0.4.0+)
+- A Supabase instance (Auth + PostgreSQL), self-hosted or not — see [`example/auth/`](example/auth/)
 - cardiolab >= 0.3.0
 
 ## Installation
@@ -54,7 +63,6 @@ cp .env.example .env
 The API verifies JWTs issued by Supabase Auth and stores its data in Supabase's PostgreSQL. A ready-to-deploy self-hosted Supabase stack (Docker Compose, no secrets included) is provided in [`example/auth/`](example/auth/). Its guide, [`example/auth/README.md`](example/auth/README.md) (in French), covers key generation, start modes (full, minimal without Studio, pgAdmin), user creation, connecting this API, running the stack only for tests or permanently, and server security.
 
 The application version (`/health`, OpenAPI docs) is not configured: it comes from `version` in `pyproject.toml`.
-                                       |
 
 ## Running
 
@@ -98,33 +106,24 @@ cardioanalysis-api/
 ├── example/auth/            # Self-hosted Supabase stack to deploy (see its README)
 ├── Dockerfile               # Production image (multi-stage, non-root)
 ├── .dockerignore
-├── .gitlab-ci.yml           # Centralised pipeline (pipeline-python-centralisee)
+├── .gitlab-ci.yml           # Centralised pipeline (component python-fastapi)
+├── CHANGELOG.md
 └── pyproject.toml           # Metadata, dependencies, ruff/pytest/coverage config
 ```
 
-Planned modules (`parse`, `analyze`, `sessions`, `analytics`) are listed in the [Roadmap](#roadmap).
+Planned modules are listed in the [Roadmap](#roadmap).
 
 
 ## API overview
 
-| Method | Endpoint                        | Description                            |
-|--------|---------------------------------|----------------------------------------|
-| GET    | `/health`                       | Service health check                   |
-| GET    | `/me`                           | Current authenticated user + HRV profile |
-| POST   | `/parse/polar`                  | Parse Polar RR file (.txt/.csv/.rr)    |
-| POST   | `/parse/hrv4training`           | Parse HRV4Training export (.csv)       |
-| POST   | `/parse/apple-health`           | Parse Apple Health export (.xml)       |
-| POST   | `/parse/garmin/fit`             | Parse Garmin FIT file                  |
-| POST   | `/parse/garmin/csv`             | Parse Garmin Connect CSV               |
-| POST   | `/analyze/resting`              | Resting HRV analysis                   |
-| POST   | `/analyze/orthostatic`          | Orthostatic protocol analysis          |
-| GET    | `/sessions`                     | List sessions                          |
-| POST   | `/sessions`                     | Create a session                       |
-| GET    | `/sessions/{id}`                | Get session detail                     |
-| DELETE | `/sessions/{id}`                | Delete a session                       |
-| GET    | `/baseline/{user_id}`           | User HRV baseline                      |
-| GET    | `/analytics/readiness`          | Readiness score time series            |
-| GET    | `/analytics/training-load`      | ATL/CTL/TSB training load              |
+| Method | Endpoint  | Auth     | Description                              |
+|--------|-----------|----------|------------------------------------------|
+| GET    | `/health` | —        | Service health check and version         |
+| GET    | `/me`     | Bearer   | Current authenticated user + HRV profile |
+
+Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). Missing, invalid or expired token → `401`. The user is always identified by the token, never by an id in the path or query (only future `/admin/...` routes will take an account id).
+
+Planned endpoints (versioned under `/v1` from v0.3.0) are listed in the [Roadmap](#roadmap).
 
 ## Development
 
@@ -149,15 +148,19 @@ Integration tests (marker `integration`) run when `DB_HOST_TEST` is set. Locally
 
 ## Roadmap
 
-| Version | Content                                      |
-|---------|----------------------------------------------|
-| v0.1.0  | Project scaffold, `/health`, GitLab CI       |
-| v0.2.0  | Authentication & user management (Supabase)  |
-| v0.3.0  | Sensor parsers (Polar, HRV4Training, Garmin, Apple Health) |
-| v0.4.0  | HRV analysis endpoints (resting, orthostatic)|
-| v0.5.0  | Supabase Postgres persistence, sessions CRUD, data migration |
-| v0.6.0  | Analytics (baseline, readiness, training load)|
-| v0.7.0+ | Other cardiolab protocols (coherence, HRR, drift, vo2max) |
+| Version | Content |
+|---------|---------|
+| v0.1.0  | ✅ Project scaffold, `/health`, GitLab CI |
+| v0.2.0  | ✅ Authentication with a self-hosted Supabase (JWT verification, `/me`), Docker image, Python 3.13 and uv |
+| v0.3.0  | **Accounts and beta**: `/v1` prefix and API database migrations, accounts and statuses, administration and audit, account deletion (`DELETE /me`), consents, beta survey, registration hook and waiting list, feature flags, e-mails |
+| v0.4.0  | **Profile and import**: `PUT /me/profile`, file import in two steps (preview, then commit) using the cardiolab parsers (Polar, HRV4Training, Garmin, Apple Health) and analyses (resting, orthostatic), `/measurements`, raw file storage |
+| v0.5.0  | **Fitness**: readiness (today and history), baseline (`/me/baseline`), monitoring, CSV export |
+| v0.6.0  | **Training**: workouts, training load (ATL/CTL/TSB), calendar, sports reference |
+| v0.7.0  | **GDPR and beta**: personal data export, purge after 30 days, consent renewal, beta statistics — **beta opening** |
+| v0.8.0  | **Tests**: summaries, history and comparison for the cardiolab protocols (coherence, HRR, drift, VO2max...) |
+| later   | Alerts, training zones, dashboard, sensors |
+
+See [CHANGELOG.md](CHANGELOG.md) for what each release contains.
 
 ## License
 
