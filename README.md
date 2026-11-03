@@ -45,7 +45,7 @@ cp .env.example .env
 | `SUPABASE_JWT_SECRET` | `JWT_SECRET` of the Supabase stack, used to verify access tokens (HS256) | — |
 | `DB_HOST_TEST`, `DB_PORT_TEST`, `DB_NAME_TEST`, `DB_USER_TEST`, `DB_PASSWORD_TEST` | Test database for integration tests (see [Development](#development)) | `localhost`, `5432`… |
 | `ENV_FILE` | Alternative env file to load instead of `.env` | `.env.nas` |
-| `SUPABASE_DIR`, `SUPABASE_ENV_FILE` | Local Supabase stack started by `tests/conftest.py` for integration tests (folder relative to the project root, env file relative to that folder) | `local/auth`, `.env` |
+| `SUPABASE_DIR`, `SUPABASE_ENV_FILE` | Local Supabase stack started by `tests/conftest.py` for integration tests (folder relative to the project root, env file relative to that folder). Defaults: `../cardioanalysis-supabase-local-nas`, `local/.env` | `local/auth`, `.env` (stack from `example/auth`) |
 
 > With a self-hosted Supabase, the port exposed on the host is the Supavisor pooler's: the user must be in the `<role>.<POOLER_TENANT_ID>` format.
 

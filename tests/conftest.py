@@ -38,18 +38,22 @@ def client() -> TestClient:
 # gateway/auth API. Neither "db" nor "supavisor" depends on "studio", so this
 # also sidesteps the api-gw → studio dependency chain entirely.
 
-# Stack location, overridable for a stack deployed elsewhere (see
-# example/auth/README.md): SUPABASE_DIR is relative to the project root (or
-# absolute), SUPABASE_ENV_FILE relative to SUPABASE_DIR.
+# Stack location. Default: the sibling private repository
+# cardioanalysis-supabase-local-nas (same defaults as cardiolab's conftest).
+# Overridable in .env for a stack deployed elsewhere (e.g. example/auth copied
+# into local/auth): SUPABASE_DIR is relative to the project root (or absolute),
+# SUPABASE_ENV_FILE relative to SUPABASE_DIR.
 _SUPABASE_DIR = (
     Path(__file__).resolve().parent.parent
-    / Path(os.getenv("SUPABASE_DIR", "local/auth")).expanduser()
-)
+    / Path(
+        os.getenv("SUPABASE_DIR", "../cardioanalysis-supabase-local-nas")
+    ).expanduser()
+).resolve()
 _COMPOSE_CMD = [
     "docker",
     "compose",
     "--env-file",
-    os.getenv("SUPABASE_ENV_FILE", ".env"),
+    os.getenv("SUPABASE_ENV_FILE", "local/.env"),
 ]
 _MINIMAL_SERVICES = ["db", "supavisor"]
 _we_started_supabase = False

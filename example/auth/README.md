@@ -273,8 +273,16 @@ Emplacement du stack utilisé par `conftest.py` (variables d'environnement) :
 
 | Variable | Défaut | Rôle |
 |----------|--------|------|
-| `SUPABASE_DIR` | `local/auth` (relatif à la racine du projet) | Dossier du stack |
-| `SUPABASE_ENV_FILE` | `.env` | Fichier d'env du stack, relatif à `SUPABASE_DIR` |
+| `SUPABASE_DIR` | `../cardioanalysis-supabase-local-nas` (relatif à la racine du projet) | Dossier du stack |
+| `SUPABASE_ENV_FILE` | `local/.env` | Fichier d'env du stack, relatif à `SUPABASE_DIR` |
+
+Avec ce guide (stack copié dans `local/auth`, env dans `.env`), définir les deux
+variables dans le `.env` de cardioanalysis-api :
+
+```bash
+SUPABASE_DIR="local/auth"
+SUPABASE_ENV_FILE=".env"
+```
 
 ```bash
 SUPABASE_DIR=~/supabase pytest
