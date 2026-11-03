@@ -60,8 +60,12 @@ app = FastAPI(
     },
 )
 
+# /health stays at the root (Docker healthcheck, monitoring); business routes are
+# versioned under /v1 so that a future /v2 can coexist with them.
+API_V1_PREFIX = "/v1"
+
 app.include_router(health_router)
-app.include_router(auth_router)
+app.include_router(auth_router, prefix=API_V1_PREFIX)
 
 
 @app.middleware("http")
