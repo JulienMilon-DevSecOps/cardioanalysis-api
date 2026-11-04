@@ -15,7 +15,10 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.auth import dependency as auth_dependency
+from app.dependencies import get_accounts
+from app.main import app
 from app.routers import auth as auth_router
+from tests.fakes import FakeAccountRepository, make_account
 
 _TEST_SECRET = "unit-test-secret-not-a-real-key-32chars+"  # noqa: S105
 _USER_WITH_PROFILE_ID = str(uuid.uuid4())
@@ -40,6 +43,17 @@ def _make_token(sub: str = _USER_WITHOUT_PROFILE_ID, **overrides) -> str:
 def _patch_jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify tokens against a fixed test secret, independent of any real .env."""
     monkeypatch.setattr(auth_dependency, "SUPABASE_JWT_SECRET", _TEST_SECRET)
+
+
+@pytest.fixture(autouse=True)
+def _approved_accounts():
+    """Give both test users an approved account (accounts are tested elsewhere)."""
+    fake = FakeAccountRepository(
+        make_account(_USER_WITH_PROFILE_ID), make_account(_USER_WITHOUT_PROFILE_ID)
+    )
+    app.dependency_overrides[get_accounts] = lambda: fake
+    yield
+    app.dependency_overrides.pop(get_accounts, None)
 
 
 class _FakeRepository:
@@ -152,3 +166,9 @@ class TestGetCurrentUser:
         body = response.json()
         assert body["id"] == _USER_WITH_PROFILE_ID
         assert body["profile"] == with_profile
+        assert body["account"] == {
+            "status": "approved",
+            "role": "user",
+            "display_name": "Test",
+            "onboarding_completed": False,
+        }
