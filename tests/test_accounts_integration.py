@@ -1,8 +1,10 @@
 """Integration tests of ``AccountRepository`` against a real Postgres.
 
 Activated when ``DB_HOST_TEST`` is set. The real ``accounts`` table is never
-touched: an isolated ``_cardioanalysis_test_accounts`` table is built from the
-real migration (``A001__accounts.sql``), before and after each test dropped.
+touched: isolated ``_cardioanalysis_test_accounts`` and
+``_cardioanalysis_test_audit_log`` tables are built from the real migrations
+(``A001__accounts.sql``, ``A002__audit_log.sql``), dropped before and after
+each test.
 """
 
 import os
@@ -12,15 +14,21 @@ import psycopg2
 import pytest
 
 from app.services.accounts import (
+    AccountAction,
     AccountExistsError,
+    AccountNotFoundError,
     AccountRepository,
     AccountRole,
     AccountStatus,
+    InvalidTransitionError,
+    OwnAccountError,
 )
+from app.services.audit import AuditRepository
 from app.services.migrations import MIGRATIONS_DIR
 
 _SCHEMA = os.getenv("DB_SCHEMA_TEST", "cardioanalysis")
 _TABLE = "_cardioanalysis_test_accounts"
+_AUDIT = "_cardioanalysis_test_audit_log"
 
 pytestmark = [
     pytest.mark.integration,
@@ -47,19 +55,22 @@ def _connect():
 
 def _drop(conn) -> None:
     with conn.cursor() as cur:
-        cur.execute(f'DROP TABLE IF EXISTS "{_SCHEMA}"."{_TABLE}"')
+        for table in (_TABLE, _AUDIT):
+            cur.execute(f'DROP TABLE IF EXISTS "{_SCHEMA}"."{table}"')
     conn.commit()
 
 
 @pytest.fixture
 def conn():
-    """Open a connection with the isolated table built from the real migration."""
+    """Open a connection with the isolated tables built from the real migrations."""
     connection = _connect()
     _drop(connection)
-    migration = (MIGRATIONS_DIR / "A001__accounts.sql").read_text(encoding="utf-8")
+    accounts = (MIGRATIONS_DIR / "A001__accounts.sql").read_text(encoding="utf-8")
+    journal = (MIGRATIONS_DIR / "A002__audit_log.sql").read_text(encoding="utf-8")
     with connection.cursor() as cur:
         cur.execute(f'SET search_path TO "{_SCHEMA}"')
-        cur.execute(migration.replace("accounts", _TABLE))
+        cur.execute(accounts.replace("accounts", _TABLE))
+        cur.execute(journal.replace("audit_log", _AUDIT))
     connection.commit()
     yield connection
     connection.rollback()
@@ -69,8 +80,14 @@ def conn():
 
 @pytest.fixture
 def repo(conn) -> AccountRepository:
-    """Repository bound to the isolated table."""
-    return AccountRepository(conn, schema=_SCHEMA, table=_TABLE)
+    """Repository bound to the isolated tables."""
+    return AccountRepository(conn, schema=_SCHEMA, table=_TABLE, audit_table=_AUDIT)
+
+
+@pytest.fixture
+def journal(conn) -> AuditRepository:
+    """Journal reader bound to the isolated audit table."""
+    return AuditRepository(conn, schema=_SCHEMA, name=_AUDIT)
 
 
 def _set_last_seen(conn, user_id: str, interval: str) -> None:
@@ -209,3 +226,140 @@ def test_table_constraints(conn, column_values: tuple[str, str]) -> None:
             ),
         )
     conn.rollback()
+
+
+# ── Status changes and journal (issue 3) ─────────────────────────────────────
+
+
+def test_change_status_updates_and_journals_together(
+    repo: AccountRepository, journal: AuditRepository
+) -> None:
+    """Status, author, date and the journal entry are written in one go."""
+    admin, user = str(uuid.uuid4()), str(uuid.uuid4())
+    repo.create(user, "Test")
+
+    account = repo.change_status(user, AccountAction.APPROVE, actor_id=admin)
+
+    assert account.status == AccountStatus.APPROVED
+    assert account.status_changed_by == admin
+    assert account.status_changed_at is not None
+    entries, total = journal.list_entries()
+    assert total == 1
+    assert (entries[0].actor_id, entries[0].action, entries[0].target) == (
+        admin,
+        "account.approve",
+        user,
+    )
+    assert entries[0].details == {"from": "pending", "to": "approved"}
+
+
+def test_refused_change_leaves_no_trace(
+    repo: AccountRepository, journal: AuditRepository
+) -> None:
+    """Invalid transition or own account: account unchanged, nothing journaled."""
+    admin, user = str(uuid.uuid4()), str(uuid.uuid4())
+    repo.create(user, "Test", status=AccountStatus.REJECTED)
+    repo.create(admin, "Admin", status=AccountStatus.APPROVED)
+
+    with pytest.raises(InvalidTransitionError):
+        repo.change_status(user, AccountAction.APPROVE, actor_id=admin)
+    with pytest.raises(OwnAccountError):
+        repo.change_status(admin, AccountAction.SUSPEND, actor_id=admin)
+    with pytest.raises(AccountNotFoundError):
+        repo.change_status(str(uuid.uuid4()), AccountAction.APPROVE, actor_id=admin)
+
+    assert repo.get(user).status == AccountStatus.REJECTED
+    assert repo.get(admin).status == AccountStatus.APPROVED
+    assert journal.list_entries() == ([], 0)
+
+
+def test_full_cycle(repo: AccountRepository, journal: AuditRepository) -> None:
+    """Approve, suspend, reactivate: three entries, newest first."""
+    admin, user = str(uuid.uuid4()), str(uuid.uuid4())
+    repo.create(user, "Test")
+
+    for action in (
+        AccountAction.APPROVE,
+        AccountAction.SUSPEND,
+        AccountAction.REACTIVATE,
+    ):
+        repo.change_status(user, action, actor_id=admin)
+
+    entries, total = journal.list_entries()
+    assert repo.get(user).status == AccountStatus.APPROVED
+    assert total == 3
+    assert [e.action for e in entries] == [
+        "account.reactivate",
+        "account.suspend",
+        "account.approve",
+    ]
+    only_suspend, _ = journal.list_entries(action="account.suspend")
+    assert [e.action for e in only_suspend] == ["account.suspend"]
+
+
+def test_cli_writes_are_journaled(
+    repo: AccountRepository, journal: AuditRepository
+) -> None:
+    """Journal create and set_role made with audit_source, without actor."""
+    user = str(uuid.uuid4())
+
+    repo.create(
+        user,
+        "Admin",
+        status=AccountStatus.APPROVED,
+        role=AccountRole.ADMIN,
+        audit_source="cli",
+    )
+    repo.set_role(user, AccountRole.USER, audit_source="cli")
+
+    entries, _ = journal.list_entries()
+    assert [(e.action, e.actor_id) for e in entries] == [
+        ("account.set_role", None),
+        ("account.create", None),
+    ]
+    assert entries[0].details == {"source": "cli", "from": "admin", "to": "user"}
+    assert entries[1].details == {
+        "source": "cli",
+        "status": "approved",
+        "role": "admin",
+    }
+
+
+def test_writes_without_audit_source_are_not_journaled(
+    repo: AccountRepository, journal: AuditRepository
+) -> None:
+    """Without audit_source (API-internal use), no journal entry."""
+    user = str(uuid.uuid4())
+
+    repo.create(user, "Test")
+    repo.set_role(user, AccountRole.ADMIN)
+
+    assert journal.list_entries() == ([], 0)
+
+
+def test_search(repo: AccountRepository) -> None:
+    """Name anywhere (case insensitive), id prefix, status, pagination, total."""
+    nana = str(uuid.uuid4())
+    repo.create(nana, "Nana")
+    others = [str(uuid.uuid4()) for _ in range(3)]
+    for i, user in enumerate(others):
+        repo.create(user, f"Other {i}", status=AccountStatus.APPROVED)
+
+    by_name, total_name = repo.search(q="NAN")
+    by_id, _ = repo.search(q=others[0][:8])
+    approved_page, total_approved = repo.search(
+        status=AccountStatus.APPROVED, limit=2, offset=1
+    )
+
+    assert ([a.user_id for a in by_name], total_name) == ([nana], 1)
+    assert others[0] in [a.user_id for a in by_id]
+    assert total_approved == 3
+    assert [a.user_id for a in approved_page] == others[1:]
+
+
+def test_search_wildcards_are_literal(repo: AccountRepository) -> None:
+    """A % or _ typed in the search does not match everything."""
+    repo.create(str(uuid.uuid4()), "Test")
+
+    assert repo.search(q="%") == ([], 0)
+    assert repo.search(q="_") == ([], 0)
