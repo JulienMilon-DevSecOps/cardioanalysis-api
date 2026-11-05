@@ -1,6 +1,12 @@
-"""Auth endpoints response schemas."""
+"""Auth endpoints request and response schemas."""
 
-from pydantic import BaseModel
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, StringConstraints
+
+DisplayName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)
+]
 
 
 class UserProfileResponse(BaseModel):
@@ -15,10 +21,30 @@ class UserProfileResponse(BaseModel):
     weight_kg: float | None = None
 
 
+class AccountResponse(BaseModel):
+    """Application account of the user: beta status, role, display name."""
+
+    status: Literal["pending", "approved", "rejected", "suspended"]
+    role: Literal["user", "admin"]
+    display_name: str
+    onboarding_completed: bool
+
+
 class MeResponse(BaseModel):
-    """Response for ``GET /me`` — identity plus HRV profile, if any."""
+    """Response for ``GET /v1/me`` — identity, account and HRV profile.
+
+    ``profile`` is ``null`` when the user has none, and always for a rejected
+    or suspended account (status only).
+    """
 
     id: str
     email: str | None = None
     role: str
+    account: AccountResponse
     profile: UserProfileResponse | None = None
+
+
+class UpdateMeRequest(BaseModel):
+    """Body of ``PATCH /v1/me``. Email and password are changed through Supabase Auth."""
+
+    display_name: DisplayName

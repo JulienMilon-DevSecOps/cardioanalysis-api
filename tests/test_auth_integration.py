@@ -5,6 +5,8 @@ Activated automatically when ``DB_HOST_TEST`` is present in the environment
 Uses an isolated ``_cardioanalysis_test_user_profiles`` table, created before
 and dropped after each test — the real ``user_profiles`` table is never
 touched. User ids are random test UUIDs, unrelated to any real account.
+Accounts come from an in-memory fake (every user approved): the accounts table
+has its own integration tests (``test_accounts_integration.py``).
 """
 
 import os
@@ -19,10 +21,22 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.auth import dependency as auth_dependency
+from app.dependencies import get_accounts
+from app.main import app
 from app.routers import auth as auth_router
+from tests.fakes import FakeAccountRepository, make_account
 
 _TEST_TABLE = "_cardioanalysis_test_user_profiles"
 _TEST_SECRET = "integration-test-secret-32-characters+"  # noqa: S105
+
+
+class _EveryoneApproved(FakeAccountRepository):
+    """Fake account store in which any user has an approved account."""
+
+    def get(self, user_id: str):
+        """Return an approved account for any user id."""
+        return make_account(user_id)
+
 
 _integration_skipif = pytest.mark.skipif(
     not os.getenv("DB_HOST_TEST"),
@@ -98,7 +112,9 @@ class TestMeWithRealDatabase:
             "get_repository",
             lambda: _repo_from_test_env(user_profiles_table_name=_TEST_TABLE),
         )
+        app.dependency_overrides[get_accounts] = lambda: _EveryoneApproved()
         yield
+        app.dependency_overrides.pop(get_accounts, None)
         _drop_test_table()
 
     def test_me_returns_profile_saved_in_the_real_database(

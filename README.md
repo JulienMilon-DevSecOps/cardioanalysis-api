@@ -105,6 +105,18 @@ ENV_FILE=.env.admin uv run python -m app.migrate --privileged   # administrator 
 
 With Docker: `docker run --rm --env-file .env.docker cardioanalysis-api python -m app.migrate`.
 
+### Accounts and first administrator
+
+Each Supabase Auth user needs an application account (table `accounts`, migration `A001`): it holds the beta status (`pending`, `approved`, `rejected`, `suspended`), the role (`user`, `admin`) and the display name. No API route can grant the admin role: the first administrator of an environment is created with a command, by someone who already has access to the database (same `DB_*` settings as the API):
+
+```bash
+uv run python -m app.accounts create <user_id> --display-name <name> --status approved --role admin
+uv run python -m app.accounts set-role <user_id> admin|user
+uv run python -m app.accounts list [--status pending]
+```
+
+`<user_id>` is the Supabase Auth user id (`auth.users.id`). `create` defaults to a `pending` user account. Everyday status changes will go through the administration API.
+
 
 ## Project structure
 
@@ -114,14 +126,17 @@ cardioanalysis-api/
 │   ├── main.py              # FastAPI app, router registration (/v1 prefix)
 │   ├── config.py            # Settings loaded from environment variables / .env
 │   ├── migrate.py           # Command line: python -m app.migrate
+│   ├── accounts.py          # Command line: python -m app.accounts (first admin)
 │   ├── migrations/          # SQL migrations of the API's tables (A<nnn>__*.sql)
 │   ├── auth/                # Supabase JWT verification (get_current_user dependency)
+│   ├── dependencies.py      # get_account, require_status (JWT + accounts table)
 │   ├── routers/             # HTTP endpoints — no business logic
 │   │   ├── health.py        # GET /health
-│   │   └── auth.py          # GET /v1/me
+│   │   └── auth.py          # /v1/me (read, update, onboarding)
 │   ├── schemas/             # Pydantic models — request/response contracts
 │   └── services/            # Application logic — only layer that imports cardiolab
 │       ├── db.py            # PostgreSQL access, get_repository(), get_connection()
+│       ├── accounts.py      # accounts table (AccountRepository)
 │       └── migrations.py    # Migration discovery and runner
 ├── tests/                   # Unit tests + integration tests (marker "integration")
 ├── example/auth/            # Self-hosted Supabase stack to deploy (see its README)
@@ -137,14 +152,26 @@ Planned modules are listed in the [Roadmap](#roadmap).
 
 ## API overview
 
-| Method | Endpoint  | Auth     | Description                              |
-|--------|-----------|----------|------------------------------------------|
-| GET    | `/health` | —        | Service health check and version         |
-| GET    | `/v1/me`  | Bearer   | Current authenticated user + HRV profile |
+| Method | Endpoint                     | Account status | Description |
+|--------|------------------------------|----------------|-------------|
+| GET    | `/health`                    | — (public)     | Service health check and version |
+| GET    | `/v1/me`                     | any            | User, account (`status`, `role`, `display_name`, `onboarding_completed`) and HRV profile. Rejected and suspended accounts get their status only (`profile: null`) |
+| PATCH  | `/v1/me`                     | approved       | Change the display name (`{"display_name": "..."}`, 1–50 characters). Email and password are changed through Supabase Auth |
+| POST   | `/v1/me/onboarding/complete` | approved       | Record that the welcome screens were seen (all devices) → `204` |
 
 Business routes are versioned under `/v1`; `/health` stays at the root (Docker healthcheck, monitoring).
 
-Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). Missing, invalid or expired token → `401`. The user is always identified by the token, never by an id in the path or query (only future `/v1/admin/...` routes will take an account id).
+Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). The user is always identified by the token, never by an id in the path or query (only future `/v1/admin/...` routes will take an account id). The account status is read from the database on every request, so a suspension applies immediately.
+
+| Situation | Code | `detail.code` |
+|---|---|---|
+| Missing, invalid or expired token | 401 | — |
+| No account for this user | 403 | `account_missing` |
+| Account status not allowed on this route | 403 | `account_pending`, `account_rejected`, `account_suspended` |
+| Invalid body | 422 | — |
+| Database unreachable | 503 | — |
+
+403 responses are `{"detail": {"code": "...", "message": "..."}}`: the front branches on `detail.code`.
 
 Planned endpoints are listed in the [Roadmap](#roadmap).
 

@@ -55,22 +55,28 @@ _COMPOSE_CMD = [
     "--env-file",
     os.getenv("SUPABASE_ENV_FILE", "local/.env"),
 ]
-_MINIMAL_SERVICES = ["db", "supavisor"]
-_we_started_supabase = False
+_MINIMAL_SERVICES = {"db": "supabase-db", "supavisor": "supabase-pooler"}
+# Services that this session started (and stops again at the end): a service
+# already running before pytest (e.g. db started by hand) is left as it was.
+_services_we_started: list[str] = []
 
 
-def _supabase_is_running() -> bool:
-    """Check whether the local Supabase stack's db container is up."""
-    try:
-        result = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Running}}", "supabase-db"],  # noqa: S603, S607
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        return False
-    return result.returncode == 0 and result.stdout.strip() == "true"
+def _running_services() -> set[str]:
+    """Return the minimal services whose container is currently running."""
+    running: set[str] = set()
+    for service, container in _MINIMAL_SERVICES.items():
+        try:
+            result = subprocess.run(  # noqa: S603 — fixed container names
+                ["docker", "inspect", "-f", "{{.State.Running}}", container],  # noqa: S607
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return set()
+        if result.returncode == 0 and result.stdout.strip() == "true":
+            running.add(service)
+    return running
 
 
 def _wait_until_postgres_accepts_connections(timeout: float = 30.0) -> None:
@@ -106,14 +112,18 @@ def _wait_until_postgres_accepts_connections(timeout: float = 30.0) -> None:
 
 def pytest_collection_finish(session: pytest.Session) -> None:
     """Start the local Supabase stack if integration tests will actually run."""
-    global _we_started_supabase  # noqa: PLW0603
     # En CI, la base est fournie par le service postgres de la pipeline
     if os.getenv("CI"):
         return
     has_integration_tests = any(
         item.get_closest_marker("integration") for item in session.items
     )
-    if not has_integration_tests or _supabase_is_running():
+    if not has_integration_tests:
+        return
+    # Both are needed: the tests connect through the pooler. A db started alone
+    # (e.g. by hand) without supavisor would make every integration test fail.
+    missing = [s for s in _MINIMAL_SERVICES if s not in _running_services()]
+    if not missing:
         return
     try:
         subprocess.run(  # noqa: S603
@@ -124,20 +134,22 @@ def pytest_collection_finish(session: pytest.Session) -> None:
                 "--wait",
                 "--wait-timeout",
                 "120",
-                *_MINIMAL_SERVICES,
+                *missing,
             ],
             cwd=_SUPABASE_DIR,
             check=False,
         )
     except FileNotFoundError:
         return  # Docker not available — the tests' own skipif/connection error will explain why.
-    _we_started_supabase = True
+    _services_we_started.extend(missing)
     _wait_until_postgres_accepts_connections()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
-    """Stop the local Supabase stack if this session is the one that started it."""
-    if _we_started_supabase:
+    """Stop the services of the local Supabase stack that this session started."""
+    if _services_we_started:
         subprocess.run(  # noqa: S603
-            [*_COMPOSE_CMD, "stop", *_MINIMAL_SERVICES], cwd=_SUPABASE_DIR, check=False
+            [*_COMPOSE_CMD, "stop", *_services_we_started],
+            cwd=_SUPABASE_DIR,
+            check=False,
         )
