@@ -159,3 +159,13 @@ def test_connection_failure_exits_with_1(
 
     assert cli.main(["list"]) == 1
     assert "Cannot connect" in capsys.readouterr().err
+
+
+def test_create_and_set_role_are_journaled_as_cli(store: FakeAccountRepository) -> None:
+    """Both writes ask the service for a journal entry with source "cli"."""
+    user_id = str(uuid.uuid4())
+
+    cli.main(["create", user_id, "--display-name", "Test"])
+    cli.main(["set-role", user_id, "admin"])
+
+    assert store.audit_sources == ["cli", "cli"]

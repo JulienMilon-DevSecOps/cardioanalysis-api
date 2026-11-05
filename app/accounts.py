@@ -11,8 +11,9 @@ Usage::
     python -m app.accounts set-role <user_id> admin
     python -m app.accounts list [--status pending]
 
-``<user_id>`` is the Supabase Auth user id (``auth.users.id``). Status changes
-of everyday use go through the administration API, not through this command.
+``<user_id>`` is the Supabase Auth user id (``auth.users.id``). ``create`` and
+``set-role`` are recorded in the administration journal (no actor, source
+``cli``). Status changes go through the administration API, not this command.
 """
 
 import argparse
@@ -87,13 +88,16 @@ def _run(accounts: AccountRepository, args: argparse.Namespace) -> int:
                 display_name,
                 status=AccountStatus(args.status),
                 role=AccountRole(args.role),
+                audit_source="cli",
             )
         except AccountExistsError:
             print(f"An account already exists for {args.user_id}.", file=sys.stderr)
             return 1
         print(f"Created: {_format(account)}")
     elif args.command == "set-role":
-        account = accounts.set_role(args.user_id, AccountRole(args.role))
+        account = accounts.set_role(
+            args.user_id, AccountRole(args.role), audit_source="cli"
+        )
         if account is None:
             print(f"No account for {args.user_id}.", file=sys.stderr)
             return 1
