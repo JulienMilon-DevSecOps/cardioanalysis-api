@@ -115,7 +115,7 @@ uv run python -m app.accounts set-role <user_id> admin|user
 uv run python -m app.accounts list [--status pending]
 ```
 
-`<user_id>` is the Supabase Auth user id (`auth.users.id`). `create` defaults to a `pending` user account. Everyday status changes will go through the administration API.
+`<user_id>` is the Supabase Auth user id (`auth.users.id`). `create` defaults to a `pending` user account. `create` and `set-role` are recorded in the administration journal (no actor, source `cli`). Status changes go through the [administration API](#administration).
 
 
 ## Project structure
@@ -129,14 +129,16 @@ cardioanalysis-api/
 │   ├── accounts.py          # Command line: python -m app.accounts (first admin)
 │   ├── migrations/          # SQL migrations of the API's tables (A<nnn>__*.sql)
 │   ├── auth/                # Supabase JWT verification (get_current_user dependency)
-│   ├── dependencies.py      # get_account, require_status (JWT + accounts table)
+│   ├── dependencies.py      # get_account, require_status, require_admin (JWT + accounts)
 │   ├── routers/             # HTTP endpoints — no business logic
 │   │   ├── health.py        # GET /health
-│   │   └── auth.py          # /v1/me (read, update, onboarding)
+│   │   ├── auth.py          # /v1/me (read, update, onboarding)
+│   │   └── admin.py         # /v1/admin (accounts, status changes, journal)
 │   ├── schemas/             # Pydantic models — request/response contracts
 │   └── services/            # Application logic — only layer that imports cardiolab
 │       ├── db.py            # PostgreSQL access, get_repository(), get_connection()
-│       ├── accounts.py      # accounts table (AccountRepository)
+│       ├── accounts.py      # accounts table, status transitions (AccountRepository)
+│       ├── audit.py         # audit_log table (administration journal)
 │       └── migrations.py    # Migration discovery and runner
 ├── tests/                   # Unit tests + integration tests (marker "integration")
 ├── example/auth/            # Self-hosted Supabase stack to deploy (see its README)
@@ -161,17 +163,40 @@ Planned modules are listed in the [Roadmap](#roadmap).
 
 Business routes are versioned under `/v1`; `/health` stays at the root (Docker healthcheck, monitoring).
 
-Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). The user is always identified by the token, never by an id in the path or query (only future `/v1/admin/...` routes will take an account id). The account status is read from the database on every request, so a suspension applies immediately.
+Protected routes expect `Authorization: Bearer <access token>`, the token being issued by Supabase Auth (`/auth/v1/token`). The user is always identified by the token, never by an id in the path or query (only `/v1/admin/...` routes take an account id). The account status is read from the database on every request, so a suspension applies immediately.
 
 | Situation | Code | `detail.code` |
 |---|---|---|
 | Missing, invalid or expired token | 401 | — |
 | No account for this user | 403 | `account_missing` |
 | Account status not allowed on this route | 403 | `account_pending`, `account_rejected`, `account_suspended` |
-| Invalid body | 422 | — |
+| Not an administrator (`/v1/admin`) | 403 | `admin_only` |
+| Account not found (`/v1/admin`) | 404 | `account_not_found` |
+| Status change not allowed, or on one's own account (`/v1/admin`) | 409 | `invalid_transition` (+ `current_status`), `own_account` |
+| Invalid body or parameter | 422 | — |
 | Database unreachable | 503 | — |
 
-403 responses are `{"detail": {"code": "...", "message": "..."}}`: the front branches on `detail.code`.
+403, 404 and 409 responses are `{"detail": {"code": "...", "message": "..."}}`: the front branches on `detail.code`.
+
+### Administration
+
+Reserved to **approved** accounts whose `accounts.role` is `admin` (never read from the JWT). No route returns health data: no measurement, score or HRV profile.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | `/v1/admin/accounts?status=&q=&limit=&offset=` | Accounts, oldest first. `q` searches the display name and the start of the user id (emails are not searchable: the API cannot read Supabase Auth's users). `limit` 1–200 (default 50) |
+| GET    | `/v1/admin/accounts/{user_id}` | One account, with who changed its status last |
+| POST   | `/v1/admin/accounts/{user_id}/approve` · `/reject` · `/suspend` · `/reactivate` | Status change, recorded in the journal in the same transaction |
+| POST   | `/v1/admin/accounts/bulk` | `{"ids": [...], "action": "approve"}` (1–100 ids): each account processed independently, one result per id (`ok`, `status`, `code`) |
+| GET    | `/v1/admin/audit?action=&limit=&offset=` | Administration journal, newest first |
+
+Allowed transitions (anything else → `409 invalid_transition`; an administrator cannot change their own status → `409 own_account`):
+
+```
+pending ──approve──► approved ──suspend──► suspended
+   │                     ▲                      │
+   └──reject──► rejected  └──────reactivate─────┘
+```
 
 Planned endpoints are listed in the [Roadmap](#roadmap).
 

@@ -6,6 +6,9 @@ account read from the database. Order of the chain::
     get_current_user  → JWT → CurrentUser             (401)
     get_account       → + row of accounts             (403 account_missing)
     require_status()  → + allowed statuses            (403 account_<status>)
+    require_admin     → + approved and role admin     (403 account_<status>, admin_only)
+
+One database connection per request (``get_db``), shared by the repositories.
 
 Errors are returned as ``{"detail": {"code": "...", "message": "..."}}`` so
 that the front can branch on ``detail.code``.
@@ -20,7 +23,13 @@ from fastapi import Depends, HTTPException, status
 
 from app.auth.dependency import get_current_user
 from app.auth.schemas import CurrentUser
-from app.services.accounts import Account, AccountRepository, AccountStatus
+from app.services.accounts import (
+    Account,
+    AccountRepository,
+    AccountRole,
+    AccountStatus,
+)
+from app.services.audit import AuditRepository
 from app.services.db import get_connection
 
 _STATUS_MESSAGES = {
@@ -39,8 +48,8 @@ def forbidden(code: str, message: str) -> HTTPException:
     )
 
 
-def get_accounts() -> Iterator[AccountRepository]:
-    """Provide an ``AccountRepository`` on a connection closed after the request.
+def get_db() -> Iterator:
+    """Provide a database connection, closed after the request.
 
     Raises:
         HTTPException: 503 if the database cannot be reached.
@@ -54,9 +63,19 @@ def get_accounts() -> Iterator[AccountRepository]:
             detail="Database unavailable",
         ) from exc
     try:
-        yield AccountRepository(conn)
+        yield conn
     finally:
         conn.close()
+
+
+def get_accounts(conn: Annotated[object, Depends(get_db)]) -> AccountRepository:
+    """Provide an ``AccountRepository`` on the request's connection."""
+    return AccountRepository(conn)
+
+
+def get_audit_log(conn: Annotated[object, Depends(get_db)]) -> AuditRepository:
+    """Provide an ``AuditRepository`` on the request's connection."""
+    return AuditRepository(conn)
 
 
 def get_account(
@@ -100,3 +119,21 @@ def require_status(*allowed: AccountStatus) -> Callable[..., Account]:
         return account
 
     return dependency
+
+
+def require_admin(account: Annotated[Account, Depends(get_account)]) -> Account:
+    """Let only approved administrators through.
+
+    The role is read from ``accounts.role`` on every request, never from the
+    JWT. A suspended administrator loses access at once.
+
+    Raises:
+        HTTPException: 403 ``account_<status>`` if the account is not approved,
+            403 ``admin_only`` if it is not an administrator.
+
+    """
+    if account.status is not AccountStatus.APPROVED:
+        raise forbidden(f"account_{account.status}", _STATUS_MESSAGES[account.status])
+    if account.role is not AccountRole.ADMIN:
+        raise forbidden("admin_only", "Reserved to administrators")
+    return account
